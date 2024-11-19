@@ -148,7 +148,7 @@ d\nMinimum MLC erase count: %d\nAverage MLC erase count: %d\n" , "0x" val1,"0x" 
         fetch_erase_count
         ;;
     "Samsung")
-        echo -e "\nmanufacturer is Kioxia with MFG-$mmcmanid"
+        echo -e "\nmanufacturer is Sansung with MFG-$mmcmanid"
         echo -e "manufacturing date of the eMMC is $mmcmandate"
         ;;
 esac
