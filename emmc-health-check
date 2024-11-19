@@ -1,5 +1,23 @@
 #!/bin/sh
 
+detectflashmanufacturer(){
+    if [[ "$1" == "4FTE4R" ]]; then
+           MANUFACTURER="Samsung"
+   elif  [[ "$1" == "004G60" ]]; then
+           MANUFACTURER="Toshiba"
+   elif  [[ "$1" == "M62704" ]]; then
+           MANUFACTURER="Kingston"
+   elif  [[ "$1" == "004GA0" ]]; then
+           MANUFACTURER="Kioxia0"
+   elif  [[ "$1" == "004GA1" ]]; then
+           MANUFACTURER="Kioxia1"
+   elif  [[ "$1" == "S40004" ]]; then
+           MANUFACTURER="Skyhigh"
+   else
+      echo "Unknown EMMC manufacturer"
+   fi
+}
+
 fetch_erase_count(){
   echo -e "\nfetch eMMC erase count to calculate wear-level efficiency...\n"
   erase_output=$(mmc kioxia erase-count $mmcdev)
@@ -89,8 +107,48 @@ echo "Using eMMC device: $mmcdev"
 mmcmanid=$(cat $namemmc)
 mmcmandate=$(cat $dateemmc)
 
-echo -e "\nmanufacturer is skyhigh with MFG-$mmcmanid"
-echo -e "manufacturing date of the eMMC is $mmcmandate"
+detectflashmanufacturer $mmcmanid
 
-emmc_life_estimation
-fetch_erase_count
+#MANUFACTURER="Kioxia1"
+
+case "$MANUFACTURER" in
+    "Skyhigh")
+        echo -e "\nmanufacturer is skyhigh with MFG-$mmcmanid"
+        echo -e "manufacturing date of the eMMC is $mmcmandate"
+        emmc_life_estimation
+
+        mmc skyhigh readfw $mmcdev
+        mmc skyhigh health-report1 $mmcdev  >/tmp/health.txt
+        input="/tmp/health.txt"
+        i=0
+        while IFS= read -r line
+        do
+          i=$(( $i+1 ))
+          if [ "$i" == 5 ] ; then
+            echo "$line" |awk 'BEGIN { FS="[ ]" } ; { val1=$5$4$3$2 ; val2=$9$8$7$6; val3=$13$12$11$10; val4=$17$16$15$14 ; printf "Remained MLC X-block count: %d\nMaximum MLC erase count: %
+d\nMinimum MLC erase count: %d\nAverage MLC erase count: %d\n" , "0x" val1,"0x" val2,"0x" val3, "0x" val4 }'
+          fi
+        done < "$input"
+        ;;
+    "Toshiba")
+        echo -e "\nmanufacturer is toshiba with MFG-$mmcmanid"
+        echo -e "manufacturing date of the eMMC is $mmcmandate"
+        emmc_life_estimation
+        fetch_erase_count
+        ;;
+    "Kingston")
+        echo -e "\nmanufacturer is skyhigh with MFG-$mmcmanid"
+        echo -e "manufacturing date of the eMMC is $mmcmandate"
+        emmc_life_estimation
+        ;;
+    "Kioxia0"|"Kioxia1")
+        echo -e "\nmanufacturer is Kioxia with MFG-$mmcmanid"
+        echo -e "manufacturing date of the eMMC is $mmcmandate"
+        emmc_life_estimation
+        fetch_erase_count
+        ;;
+    "Samsung")
+        echo -e "\nmanufacturer is Kioxia with MFG-$mmcmanid"
+        echo -e "manufacturing date of the eMMC is $mmcmandate"
+        ;;
+esac
