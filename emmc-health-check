@@ -1,0 +1,96 @@
+#!/bin/sh
+
+fetch_erase_count(){
+  echo -e "\nfetch eMMC erase count to calculate wear-level efficiency...\n"
+  erase_output=$(mmc kioxia erase-count $mmcdev)
+
+  # Parse max and avg erase counts from the output
+  max_erase=$(echo "$erase_output" | awk '/Maximum value of erase count in MLC area:/ {print $NF}')
+  avg_erase=$(echo "$erase_output" | awk '/Average value of erase count in MLC area:/ {print $NF}')
+
+  echo -e "Maximum Erase Count: $max_erase"
+  echo -e "Average Erase Count: $avg_erase\n"
+
+  # Calculate and display wear-leveling efficiency
+  calculate_wear_leveling_efficiency "$max_erase" "$avg_erase"
+  echo -e "\nPercentage Data for Reference:"
+  echo -e "High Efficiency (≥80%): No action required. Device is healthy"
+  echo -e "Moderate Efficiency (60-80%): Monitor closely. Plan for maintenance or replacement in high-demand environments."
+  echo -e "Low Efficiency (<60%): Investigate potential causes:
+                       Uneven workload distribution.
+                       Firmware or wear-leveling algorithm issues."
+}
+
+calculate_wear_leveling_efficiency() {
+
+  # Formula:
+  # Wear-leveling efficiency (%) = (Average Erase Count / Maximum Erase Count) × 100
+
+  local max_erase=$1
+  local avg_erase=$2
+
+  if [[ $max_erase -eq 0 ]]; then
+      echo "Error: Maximum erase count is zero; invalid data."
+      return
+  fi
+
+  local efficiency=$(awk "BEGIN {printf \"%.2f\", ($avg_erase / $max_erase) * 100}")
+  echo "Wear-leveling Efficiency: $efficiency% "
+}
+
+calculate_life_remaining() {
+    case $1 in
+        0x00) echo "0-10% remaining life";;
+        0x01) echo "10-20% remaining life";;
+        0x02) echo "20-30% remaining life";;
+        0x03) echo "30-40% remaining life";;
+        0x04) echo "40-50% remaining life";;
+        0x05) echo "50-60% remaining life";;
+        0x06) echo "60-70% remaining life";;
+        0x07) echo "70-80% remaining life";;
+        0x08) echo "80-90% remaining life";;
+        0x09) echo "90-100% remaining life";;
+        *) echo "Unknown life value calculated, seems to be eMMC is badly damaged !";;
+    esac
+}
+
+emmc_life_estimation(){
+  # Extract Life Time Estimation A(Main area) and B(Enhanced area not considering for now)
+  LIFE_INFO=$(mmc extcsd read "$mmcdev" 2>/dev/null | grep -A 1 LIFE)
+
+  LIFE_A_HEX=$(echo "$LIFE_INFO" | grep "Life Time Estimation A" | awk -F': ' '{print $2}')
+  LIFE_B_HEX=$(echo "$LIFE_INFO" | grep "Life Time Estimation B" | awk -F': ' '{print $2}')
+
+  LIFE_A_PERCENT=$(calculate_life_remaining $LIFE_A_HEX)
+  LIFE_B_PERCENT=$(calculate_life_remaining $LIFE_B_HEX)
+
+  echo -e "\neMMC Life Time Estimation:"
+  echo "  - eMMC Main Area (A): $LIFE_A_PERCENT "
+  #echo "  - Enhanced Area (B): $LIFE_B_PERCENT "
+}
+
+##########
+# main
+##########
+
+if [ -f /sys/block/mmcblk3/device/name ]; then
+  mmcdev=/dev/mmcblk3
+  namemmc=/sys/block/mmcblk3/device/name
+  dateemmc=/sys/block/mmcblk3/device/date
+fi
+if [ -f /sys/block/mmcblk0/device/name ]; then
+  mmcdev=/dev/mmcblk0
+  namemmc=/sys/block/mmcblk0/device/name
+  dateemmc=/sys/block/mmcblk0/device/name
+fi
+
+echo "Using eMMC device: $mmcdev"
+
+mmcmanid=$(cat $namemmc)
+mmcmandate=$(cat $dateemmc)
+
+echo -e "\nmanufacturer is skyhigh with MFG-$mmcmanid"
+echo -e "manufacturing date of the eMMC is $mmcmandate"
+
+emmc_life_estimation
+fetch_erase_count
